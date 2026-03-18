@@ -1,0 +1,1035 @@
+<html lang="en" vid="0"><head vid="1">
+    <meta charset="UTF-8" vid="2">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" vid="3">
+    <title vid="4">Gallery Waitlist</title>
+    <style vid="5">
+        :root {
+            --bg-color: #F0F2F4;
+            --text-main: #1a1a1a;
+            --text-sub: #888888;
+            --grad-1: rgba(214, 196, 170, 0.55);
+            --grad-2: rgba(176, 205, 214, 0.42);
+            --grad-3: rgba(236, 228, 208, 0.65);
+            --grad-4: rgba(168, 179, 150, 0.24);
+            --card-bg: #e0e0e0;
+            --card-shadow: rgba(0,0,0,0.05);
+            --card-shadow-hover: rgba(0,0,0,0.1);
+            --toggle-border: rgba(0,0,0,0.12);
+            --toggle-bg: rgba(240, 242, 244, 0.88);
+            --toggle-active-border: rgba(0,0,0,0.28);
+            --toggle-active-bg: rgba(255,255,255,0.55);
+            --audio-border: rgba(0,0,0,0.12);
+            --audio-bg: rgba(240, 242, 244, 0.88);
+            --audio-active-bg: rgba(255,255,255,0.6);
+            --font-stack: 'Courier New', Courier, monospace; 
+            --curve-intensity: 600px;
+        }
+
+        body.night-mode {
+            --bg-color: #101215;
+            --text-main: #f2efe8;
+            --text-sub: #9a9da4;
+            --grad-1: rgba(40, 61, 86, 0.48);
+            --grad-2: rgba(96, 74, 55, 0.32);
+            --grad-3: rgba(15, 25, 40, 0.78);
+            --grad-4: rgba(126, 108, 79, 0.18);
+            --card-bg: #1a1e24;
+            --card-shadow: rgba(0,0,0,0.28);
+            --card-shadow-hover: rgba(0,0,0,0.42);
+            --toggle-border: rgba(255,255,255,0.12);
+            --toggle-bg: rgba(16, 18, 21, 0.78);
+            --toggle-active-border: rgba(255,255,255,0.26);
+            --toggle-active-bg: rgba(255,255,255,0.08);
+            --audio-border: rgba(255,255,255,0.12);
+            --audio-bg: rgba(16, 18, 21, 0.78);
+            --audio-active-bg: rgba(255,255,255,0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            isolation: isolate;
+            transition: background-color 0.8s ease, color 0.8s ease;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: -14%;
+            z-index: -2;
+            pointer-events: none;
+            transition: opacity 1.2s ease;
+        }
+
+        body::before {
+            background:
+                radial-gradient(circle at 18% 22%, var(--grad-1) 0, transparent 42%),
+                radial-gradient(circle at 78% 20%, var(--grad-2) 0, transparent 38%),
+                radial-gradient(circle at 50% 72%, var(--grad-3) 0, transparent 48%);
+            animation: driftOne 24s ease-in-out infinite alternate;
+            opacity: 0.95;
+        }
+
+        body::after {
+            background:
+                radial-gradient(circle at 26% 78%, var(--grad-4) 0, transparent 34%),
+                radial-gradient(circle at 82% 68%, var(--grad-2) 0, transparent 30%);
+            filter: blur(28px);
+            animation: driftTwo 30s ease-in-out infinite alternate;
+            opacity: 0.75;
+        }
+
+        body.grid-mode {
+            height: auto;
+            min-height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            justify-content: flex-start;
+        }
+
+        
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 100;
+            pointer-events: none; 
+            mix-blend-mode: multiply;
+        }
+
+        .brand {
+            font-size: 11px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .meta {
+            text-align: right;
+            font-size: 10px;
+            color: var(--text-sub);
+            line-height: 1.4;
+        }
+
+        
+        .gallery-viewport {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100vw;
+            height: 40vh;
+            perspective: 1200px; 
+            overflow: visible;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.grid-mode .gallery-viewport {
+            position: relative;
+            top: auto;
+            left: auto;
+            transform: none;
+            width: 100%;
+            height: auto;
+            min-height: 100vh;
+            padding: 96px 24px 120px;
+            perspective: none;
+            overflow: visible;
+            display: block;
+            cursor: default;
+        }
+
+        .gallery-viewport:active {
+            cursor: grabbing;
+        }
+
+        .strip-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            will-change: transform;
+        }
+
+        body.grid-mode .strip-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 18px;
+            height: auto;
+            transform-style: flat;
+            will-change: auto;
+        }
+
+        
+        .card {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200px; 
+            height: 260px; 
+            margin-left: -100px; 
+            margin-top: -130px;
+            background: var(--card-bg);
+            transform-style: preserve-3d;
+            will-change: transform, opacity;
+            
+            box-shadow: 0 10px 40px var(--card-shadow); 
+            transition: box-shadow 0.4s ease;
+        }
+
+        body.grid-mode .card {
+            position: relative;
+            top: auto;
+            left: auto;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            aspect-ratio: 4 / 5;
+            transform: none !important;
+            opacity: 1 !important;
+            display: block !important;
+        }
+
+        .card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            filter: grayscale(20%) contrast(95%); 
+        }
+
+        .card:hover {
+            box-shadow: 0 20px 60px var(--card-shadow-hover);
+            z-index: 1000 !important; 
+        }
+
+        
+        .layout-toggle-container {
+            position: fixed;
+            left: 50%;
+            bottom: 40px;
+            transform: translateX(-50%);
+            z-index: 200;
+            opacity: 0;
+            animation: fadeIn 2s ease 1s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        @keyframes driftOne {
+            0% { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+            50% { transform: translate3d(1.2%, 1.5%, 0) scale(1.04); }
+            100% { transform: translate3d(-0.8%, 1%, 0) scale(1.02); }
+        }
+
+        @keyframes driftTwo {
+            0% { transform: translate3d(1%, -1%, 0) scale(1); }
+            50% { transform: translate3d(-1.5%, 1%, 0) scale(1.06); }
+            100% { transform: translate3d(1.4%, 0.6%, 0) scale(1.03); }
+        }
+
+        .toggle-group {
+            display: inline-flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid color-mix(in srgb, var(--toggle-border) 85%, transparent);
+            background: color-mix(in srgb, var(--toggle-bg) 92%, transparent);
+            backdrop-filter: blur(12px);
+            border-radius: 999px;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.08);
+        }
+
+        .toggle-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-family: var(--font-stack);
+            color: var(--text-main);
+            padding: 0;
+            width: 52px;
+            height: 52px;
+            border-radius: 999px;
+            opacity: 0.55;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s ease, border-color 0.3s ease, background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .toggle-btn:hover,
+        .toggle-btn:focus-visible {
+            opacity: 1;
+            outline: none;
+            transform: scale(1.04);
+        }
+
+        .toggle-btn.active {
+            opacity: 1;
+            border-color: var(--toggle-active-border);
+            background: var(--toggle-active-bg);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.12);
+        }
+
+        .toggle-icon {
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+
+        .toggle-icon path,
+        .toggle-icon rect {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .audio-toggle {
+            position: fixed;
+            right: 28px;
+            bottom: 40px;
+            width: 52px;
+            height: 52px;
+            border-radius: 999px;
+            border: 1px solid var(--audio-border);
+            background: var(--audio-bg);
+            color: var(--text-main);
+            z-index: 210;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            opacity: 0;
+            animation: fadeIn 2s ease 1s forwards;
+            transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+        }
+
+        .audio-toggle:hover,
+        .audio-toggle:focus-visible {
+            transform: translateY(-1px);
+            outline: none;
+        }
+
+        .audio-toggle.is-playing {
+            background: var(--audio-active-bg);
+        }
+
+        .audio-toggle:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .audio-icon {
+            width: 18px;
+            height: 18px;
+            display: block;
+        }
+
+        .audio-icon path,
+        .audio-icon line,
+        .audio-icon polygon {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .audio-toggle.is-playing .icon-play {
+            display: none;
+        }
+
+        .audio-toggle:not(.is-playing) .icon-pause {
+            display: none;
+        }
+
+        @media (max-width: 640px) {
+            .layout-toggle-container {
+                left: 50%;
+                bottom: 28px;
+                transform: translateX(-50%);
+            }
+
+            .audio-toggle {
+                right: 20px;
+                bottom: 28px;
+            }
+        }
+
+        
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 1s ease-in-out;
+            pointer-events: none;
+        }
+        
+        .loader-text {
+            font-size: 10px;
+            letter-spacing: 0.2em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+    </style>
+</head>
+<body vid="6">
+
+    <header vid="7">
+        <div class="brand" vid="8">JOSÉ IGNACIO ARCHIVE</div>
+        <div class="meta" vid="9">
+            CURRENTLY IN JOSÉ IGNACIO<br vid="10">
+            <span id="weather">Loading weather...</span>
+        </div>
+    </header>
+
+    <div class="gallery-viewport" id="viewport" vid="11">
+        <div class="strip-container" id="strip" vid="12">
+            
+        </div>
+    </div>
+
+    <div class="layout-toggle-container" vid="13">
+        <div class="toggle-group" vid="15">
+            <button type="button" class="toggle-btn active" data-layout="rotate" aria-label="Rotate layout" title="Rotate layout" vid="16">
+                <svg class="toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
+                    <path d="M20 4v6h-6"></path>
+                </svg>
+            </button>
+            <button type="button" class="toggle-btn" data-layout="grid" aria-label="Grid layout" title="Grid layout" vid="17">
+                <svg class="toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="4" width="6" height="6"></rect>
+                    <rect x="14" y="4" width="6" height="6"></rect>
+                    <rect x="4" y="14" width="6" height="6"></rect>
+                    <rect x="14" y="14" width="6" height="6"></rect>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <button type="button" class="audio-toggle" id="audio-toggle" aria-label="Play album audio" title="Play album audio">
+        <svg class="audio-icon icon-play" viewBox="0 0 24 24" aria-hidden="true">
+            <polygon points="8,6 18,12 8,18"></polygon>
+        </svg>
+        <svg class="audio-icon icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="9" y1="6" x2="9" y2="18"></line>
+            <line x1="15" y1="6" x2="15" y2="18"></line>
+        </svg>
+    </button>
+
+    <div class="overlay" id="overlay" vid="18">
+        <div class="loader-text" vid="19">INITIALIZING GALLERY...</div>
+    </div>
+
+    <script vid="20">
+        
+        const strip = document.getElementById('strip');
+        const viewport = document.getElementById('viewport');
+        const overlay = document.getElementById('overlay');
+        const loaderText = document.querySelector('.loader-text');
+        const weatherEl = document.getElementById('weather');
+        const audioToggle = document.getElementById('audio-toggle');
+        const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
+        const galleryFolder = 'Images';
+
+        
+        const cardWidth = 220; 
+        const visibleRange = 2000; 
+        const perspectiveDepth = 800; 
+
+        let imagePaths = [];
+        let audioPaths = [];
+        let cards = [];
+        let audioPlayer = null;
+        let currentAudioIndex = -1;
+        let audioIntent = 'paused';
+        let currentScroll = 0;
+        let targetScroll = 0;
+        let currentLayout = 'rotate';
+        let currentIsDay = true;
+        let lightGradientPalette = null;
+        let darkGradientPalette = null;
+        let isDragging = false;
+        let startX = 0;
+        let lastX = 0;
+        let velocity = 0;
+        let rafId;
+
+        async function loadImagePaths() {
+            const response = await fetch(`/api/gallery?folder=${encodeURIComponent(galleryFolder)}`, {
+                cache: 'no-store'
+            });
+            if (!response.ok) {
+                throw new Error(`Gallery request failed with ${response.status}`);
+            }
+            const data = await response.json();
+            return Array.isArray(data.images) ? data.images : [];
+        }
+
+        async function loadWeather() {
+            try {
+                const response = await fetch('/api/weather', { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error(`Weather request failed with ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentIsDay = data.isDay;
+                applyThemeMode(currentIsDay);
+                weatherEl.textContent = `${Math.round(data.temperatureC)}°C · ${data.summary} · Wind ${Math.round(data.windKmh)} km/h`;
+            } catch (error) {
+                console.error(error);
+                weatherEl.textContent = 'Weather unavailable';
+            }
+        }
+
+        async function loadAudioPaths() {
+            const response = await fetch(`/api/audio?folder=${encodeURIComponent(galleryFolder)}`, {
+                cache: 'no-store'
+            });
+            if (!response.ok) {
+                throw new Error(`Audio request failed with ${response.status}`);
+            }
+            const data = await response.json();
+            return Array.isArray(data.files) ? data.files : [];
+        }
+
+        async function refreshAudioSources() {
+            const latestAudioPaths = await loadAudioPaths().catch((error) => {
+                console.error(error);
+                return audioPaths;
+            });
+
+            audioPaths = latestAudioPaths;
+
+            if (!audioPaths.length) {
+                if (audioPlayer) {
+                    audioPlayer.pause();
+                    audioPlayer.removeAttribute('src');
+                    audioPlayer.load();
+                }
+                currentAudioIndex = -1;
+                audioIntent = 'paused';
+                updateAudioButton();
+                return false;
+            }
+
+            if (currentAudioIndex >= audioPaths.length) {
+                currentAudioIndex = 0;
+            }
+
+            if (audioPlayer) {
+                const currentPath = decodeURI(audioPlayer.getAttribute('src') || '');
+                if (currentPath && !audioPaths.includes(currentPath)) {
+                    currentAudioIndex = 0;
+                    setAudioSource(currentAudioIndex);
+                    audioIntent = 'paused';
+                }
+            }
+
+            updateAudioButton();
+            return true;
+        }
+
+        function applyGradientPalette(palette) {
+            if (!palette || palette.length < 4) {
+                return;
+            }
+
+            document.documentElement.style.setProperty('--grad-1', palette[0]);
+            document.documentElement.style.setProperty('--grad-2', palette[1]);
+            document.documentElement.style.setProperty('--grad-3', palette[2]);
+            document.documentElement.style.setProperty('--grad-4', palette[3]);
+        }
+
+        function applyThemeMode(isDay) {
+            document.body.classList.toggle('night-mode', !isDay);
+            const palette = isDay ? lightGradientPalette : darkGradientPalette;
+            if (palette) {
+                applyGradientPalette(palette);
+            }
+        }
+
+        function rgbToRgba(rgb, alpha) {
+            return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+        }
+
+        function luminance(rgb) {
+            return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+        }
+
+        function averageImageColor(path) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    const sampleSize = 24;
+                    canvas.width = sampleSize;
+                    canvas.height = sampleSize;
+                    ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
+                    const { data } = ctx.getImageData(0, 0, sampleSize, sampleSize);
+
+                    let r = 0;
+                    let g = 0;
+                    let b = 0;
+                    let count = 0;
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        const alpha = data[i + 3];
+                        if (alpha < 20) continue;
+                        r += data[i];
+                        g += data[i + 1];
+                        b += data[i + 2];
+                        count += 1;
+                    }
+
+                    if (!count) {
+                        resolve(null);
+                        return;
+                    }
+
+                    resolve({
+                        r: Math.round(r / count),
+                        g: Math.round(g / count),
+                        b: Math.round(b / count)
+                    });
+                };
+                img.onerror = reject;
+                img.src = encodeURI(path);
+            });
+        }
+
+        async function deriveGradientPalettes(paths) {
+            const samplePaths = paths.slice(0, 36);
+            const colors = (await Promise.all(
+                samplePaths.map((path) =>
+                    averageImageColor(path).catch(() => null)
+                )
+            )).filter(Boolean);
+
+            if (!colors.length) {
+                return;
+            }
+
+            const sorted = colors.sort((a, b) => luminance(b) - luminance(a));
+            const bright = sorted.slice(0, Math.max(6, Math.min(12, sorted.length)));
+            const dark = sorted.slice(-Math.max(6, Math.min(12, sorted.length)));
+
+            lightGradientPalette = [
+                rgbToRgba(bright[0] || sorted[0], 0.54),
+                rgbToRgba(bright[Math.floor(bright.length / 2)] || sorted[1] || sorted[0], 0.42),
+                rgbToRgba(bright[bright.length - 1] || sorted[2] || sorted[0], 0.64),
+                rgbToRgba(sorted[Math.floor(sorted.length / 2)] || bright[0], 0.24)
+            ];
+
+            darkGradientPalette = [
+                rgbToRgba(dark[0] || sorted[sorted.length - 1], 0.48),
+                rgbToRgba(dark[Math.floor(dark.length / 2)] || sorted[sorted.length - 2] || sorted[0], 0.32),
+                rgbToRgba(dark[dark.length - 1] || sorted[sorted.length - 1], 0.78),
+                rgbToRgba(sorted[Math.max(0, Math.floor(sorted.length / 2) - 1)] || dark[0], 0.18)
+            ];
+
+            applyThemeMode(currentIsDay);
+        }
+
+        function updateAudioButton() {
+            const isPlaying = audioIntent === 'playing';
+            audioToggle.classList.toggle('is-playing', Boolean(isPlaying));
+            audioToggle.setAttribute('aria-label', isPlaying ? 'Pause album audio' : 'Play album audio');
+            audioToggle.setAttribute('title', isPlaying ? 'Pause album audio' : 'Play album audio');
+            audioToggle.disabled = !audioPaths.length;
+        }
+
+        function chooseNextAudioIndex() {
+            if (!audioPaths.length) {
+                return -1;
+            }
+            return (currentAudioIndex + 1 + audioPaths.length) % audioPaths.length;
+        }
+
+        function setAudioSource(index) {
+            if (!audioPlayer || index < 0 || index >= audioPaths.length) {
+                return;
+            }
+
+            currentAudioIndex = index;
+            audioPlayer.src = encodeURI(audioPaths[currentAudioIndex]);
+            audioPlayer.load();
+        }
+
+        function ensureAudioPlayer() {
+            if (!audioPaths.length) {
+                audioToggle.disabled = true;
+                return false;
+            }
+
+            if (!audioPlayer) {
+                currentAudioIndex = chooseNextAudioIndex();
+                audioPlayer = document.createElement('video');
+                audioPlayer.preload = 'metadata';
+                audioPlayer.playsInline = true;
+                audioPlayer.muted = false;
+                audioPlayer.volume = 1;
+                audioPlayer.style.position = 'fixed';
+                audioPlayer.style.width = '1px';
+                audioPlayer.style.height = '1px';
+                audioPlayer.style.opacity = '0';
+                audioPlayer.style.pointerEvents = 'none';
+                audioPlayer.style.left = '-9999px';
+                audioPlayer.style.bottom = '0';
+                document.body.appendChild(audioPlayer);
+                setAudioSource(currentAudioIndex);
+
+                audioPlayer.addEventListener('play', () => {
+                    audioIntent = 'playing';
+                    updateAudioButton();
+                });
+                audioPlayer.addEventListener('pause', () => {
+                    audioIntent = 'paused';
+                    updateAudioButton();
+                });
+                audioPlayer.addEventListener('ended', () => {
+                    playNextAudio();
+                });
+                audioPlayer.addEventListener('error', (error) => {
+                    console.error(error);
+                    playNextAudio();
+                });
+            }
+
+            return true;
+        }
+
+        async function playCurrentAudio() {
+            if (!audioPlayer) {
+                return;
+            }
+
+            audioIntent = 'playing';
+            updateAudioButton();
+
+            try {
+                await audioPlayer.play();
+                updateAudioButton();
+            } catch (error) {
+                console.error(error);
+                if (audioPaths.length > 1) {
+                    await playNextAudio();
+                    return;
+                }
+                audioIntent = 'paused';
+                updateAudioButton();
+            }
+        }
+
+        function pauseCurrentAudio() {
+            if (!audioPlayer) {
+                return;
+            }
+
+            audioIntent = 'paused';
+            audioPlayer.pause();
+            updateAudioButton();
+        }
+
+        async function playNextAudio() {
+            if (!(await refreshAudioSources()) || !audioPlayer) {
+                audioIntent = 'paused';
+                updateAudioButton();
+                return;
+            }
+
+            const nextIndex = chooseNextAudioIndex();
+            setAudioSource(nextIndex);
+            await playCurrentAudio();
+        }
+
+        async function toggleAudioPlayback() {
+            if (!(await refreshAudioSources())) {
+                return;
+            }
+
+            if (!ensureAudioPlayer()) {
+                return;
+            }
+
+            if (audioIntent === 'playing') {
+                pauseCurrentAudio();
+                return;
+            }
+
+            if (!audioPlayer.src) {
+                setAudioSource(chooseNextAudioIndex());
+            }
+
+            await playCurrentAudio();
+        }
+
+        function buildCards() {
+            strip.innerHTML = '';
+            imagePaths.forEach((path, index) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const img = document.createElement('img');
+                img.src = encodeURI(path);
+                img.alt = `Gallery image ${index + 1}`;
+
+                card.appendChild(img);
+                strip.appendChild(card);
+                card.dataset.index = index;
+            });
+            cards = Array.from(document.querySelectorAll('.card'));
+            applyLayout(currentLayout);
+        }
+
+        
+        const autoScrollSpeed = 0.5;
+
+        
+        function animate() {
+            if (currentLayout !== 'rotate') {
+                rafId = null;
+                return;
+            }
+            if (!cards.length) {
+                rafId = requestAnimationFrame(animate);
+                return;
+            }
+            
+            if (!isDragging) {
+                targetScroll += velocity;
+                velocity *= 0.95;
+                
+                
+                targetScroll += autoScrollSpeed;
+            }
+
+            
+            currentScroll += (targetScroll - currentScroll) * 0.1;
+
+            cards.forEach(card => {
+                const index = parseInt(card.dataset.index);
+                
+                
+                
+                let virtualIndex = index * cardWidth - currentScroll;
+                
+                
+                const totalSetWidth = imagePaths.length * cardWidth;
+                while (virtualIndex < -totalSetWidth / 2) virtualIndex += totalSetWidth;
+                while (virtualIndex > totalSetWidth / 2) virtualIndex -= totalSetWidth;
+
+                
+                if (Math.abs(virtualIndex) < window.innerWidth) {
+                    card.style.display = 'block';
+
+                    
+                    
+                    const progress = virtualIndex / (window.innerWidth / 1.5);
+                    const clampedProgress = Math.max(-1, Math.min(1, progress));
+                    
+                    
+                    const x = virtualIndex;
+                    
+                    
+                    
+                    const z = -Math.pow(Math.abs(progress), 2) * 500;
+
+                    
+                    const rotateY = progress * 45; 
+
+                    card.style.transform = `
+                        translateX(${x}px) 
+                        translateZ(${z}px) 
+                        rotateY(${rotateY}deg)
+                    `;
+
+                    
+                    card.style.opacity = 1 - Math.pow(Math.abs(progress), 3);
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            rafId = requestAnimationFrame(animate);
+        }
+
+        function stopAnimation() {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+        }
+
+        function applyLayout(layout) {
+            currentLayout = layout;
+            document.body.classList.toggle('grid-mode', layout === 'grid');
+
+            toggleButtons.forEach((button) => {
+                button.classList.toggle('active', button.dataset.layout === layout);
+            });
+
+            if (layout === 'grid') {
+                stopAnimation();
+                viewport.style.cursor = 'default';
+                cards.forEach((card) => {
+                    card.style.display = 'block';
+                    card.style.transform = 'none';
+                    card.style.opacity = '1';
+                });
+                return;
+            }
+
+            viewport.style.cursor = isDragging ? 'grabbing' : 'grab';
+            if (!rafId) {
+                animate();
+            }
+        }
+
+        async function initializeGallery() {
+            try {
+                [imagePaths, audioPaths] = await Promise.all([
+                    loadImagePaths(),
+                    loadAudioPaths().catch((error) => {
+                        console.error(error);
+                        return [];
+                    })
+                ]);
+                if (!imagePaths.length) {
+                    loaderText.textContent = 'NO PHOTOS FOUND IN GALLERY FOLDER';
+                    overlay.style.opacity = 1;
+                    return;
+                }
+
+                audioToggle.disabled = audioPaths.length === 0;
+                updateAudioButton();
+                deriveGradientPalettes(imagePaths).catch((error) => {
+                    console.error(error);
+                });
+                buildCards();
+                setTimeout(() => {
+                    overlay.style.opacity = 0;
+                    applyLayout(currentLayout);
+                }, 1000);
+            } catch (error) {
+                console.error(error);
+                loaderText.textContent = 'GALLERY FAILED TO LOAD';
+                overlay.style.opacity = 1;
+            }
+        }
+
+        
+        viewport.addEventListener('mousedown', (e) => {
+            if (currentLayout !== 'rotate') return;
+            isDragging = true;
+            startX = e.clientX;
+            lastX = e.clientX;
+            viewport.style.cursor = 'grabbing';
+            
+            velocity = 0;
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            viewport.style.cursor = currentLayout === 'rotate' ? 'grab' : 'default';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (currentLayout !== 'rotate') return;
+            if (!isDragging) return;
+            
+            const delta = e.clientX - lastX;
+            lastX = e.clientX;
+            
+            
+            targetScroll -= delta * 1.5;
+            
+            
+            velocity = -delta * 0.5;
+        });
+
+        
+        viewport.addEventListener('touchstart', (e) => {
+            if (currentLayout !== 'rotate') return;
+            isDragging = true;
+            startX = e.touches[0].clientX;
+            lastX = e.touches[0].clientX;
+            velocity = 0;
+        });
+
+        window.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (currentLayout !== 'rotate') return;
+            if (!isDragging) return;
+            const x = e.touches[0].clientX;
+            const delta = x - lastX;
+            lastX = x;
+            targetScroll -= delta * 1.5;
+            velocity = -delta * 0.5;
+        });
+
+        toggleButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                applyLayout(button.dataset.layout);
+            });
+        });
+
+        audioToggle.addEventListener('click', () => {
+            toggleAudioPlayback();
+        });
+
+        
+        initializeGallery();
+        loadWeather();
+
+    </script>
+
+</body></html>
