@@ -324,37 +324,81 @@
             position: fixed;
             right: 28px;
             bottom: 40px;
+            z-index: 210;
+            opacity: 0;
+            animation: fadeIn 2s ease 1s forwards;
+        }
+
+        .audio-toggle-btn {
+            position: relative;
             width: 52px;
             height: 52px;
             border-radius: 999px;
             border: 1px solid var(--audio-border);
             background: var(--audio-bg);
             color: var(--text-main);
-            z-index: 210;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             backdrop-filter: blur(12px);
-            opacity: 0;
-            animation: fadeIn 2s ease 1s forwards;
-            transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+            transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .audio-toggle:hover,
-        .audio-toggle:focus-visible {
+        .audio-toggle-btn::after {
+            content: "";
+            position: absolute;
+            inset: -8px;
+            border-radius: inherit;
+            border: 1px solid color-mix(in srgb, var(--text-main) 18%, transparent);
+            opacity: 0;
+            transform: scale(0.9);
+        }
+
+        .audio-toggle-btn:hover,
+        .audio-toggle-btn:focus-visible {
             transform: translateY(-1px);
             outline: none;
         }
 
-        .audio-toggle.is-playing {
+        .audio-toggle.is-playing .audio-toggle-btn {
             background: var(--audio-active-bg);
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-main) 10%, transparent), 0 12px 28px color-mix(in srgb, var(--text-main) 16%, transparent);
         }
 
-        .audio-toggle:disabled {
+        .audio-toggle.is-playing .audio-toggle-btn::after {
+            opacity: 1;
+            animation: audioPulse 1.8s ease-out infinite;
+        }
+
+        .audio-toggle:disabled .audio-toggle-btn,
+        .audio-toggle.is-disabled .audio-toggle-btn {
             opacity: 0.35;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .audio-status {
+            position: absolute;
+            left: 50%;
+            bottom: 64px;
+            transform: translateX(-50%);
+            min-width: max-content;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--audio-bg) 92%, transparent);
+            border: 1px solid color-mix(in srgb, var(--audio-border) 85%, transparent);
+            color: var(--text-sub);
+            font-size: 9px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            backdrop-filter: blur(10px);
+            transition: color 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+        }
+
+        .audio-toggle.is-playing .audio-status {
+            color: var(--text-main);
+            background: color-mix(in srgb, var(--audio-active-bg) 96%, transparent);
         }
 
         .audio-icon {
@@ -379,6 +423,21 @@
 
         .audio-toggle:not(.is-playing) .icon-pause {
             display: none;
+        }
+
+        @keyframes audioPulse {
+            0% {
+                opacity: 0.42;
+                transform: scale(0.96);
+            }
+            70% {
+                opacity: 0;
+                transform: scale(1.22);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(1.24);
+            }
         }
 
         @media (max-width: 640px) {
@@ -460,15 +519,18 @@
         </div>
     </div>
 
-    <button type="button" class="audio-toggle" id="audio-toggle" aria-label="Play album audio" title="Play album audio">
-        <svg class="audio-icon icon-play" viewBox="0 0 24 24" aria-hidden="true">
-            <polygon points="8,6 18,12 8,18"></polygon>
-        </svg>
-        <svg class="audio-icon icon-pause" viewBox="0 0 24 24" aria-hidden="true">
-            <line x1="9" y1="6" x2="9" y2="18"></line>
-            <line x1="15" y1="6" x2="15" y2="18"></line>
-        </svg>
-    </button>
+    <div class="audio-toggle" id="audio-toggle">
+        <div class="audio-status" id="audio-status">Sound Off</div>
+        <button type="button" class="audio-toggle-btn" aria-label="Play album audio" title="Play album audio">
+            <svg class="audio-icon icon-play" viewBox="0 0 24 24" aria-hidden="true">
+                <polygon points="8,6 18,12 8,18"></polygon>
+            </svg>
+            <svg class="audio-icon icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="9" y1="6" x2="9" y2="18"></line>
+                <line x1="15" y1="6" x2="15" y2="18"></line>
+            </svg>
+        </button>
+    </div>
 
     <div class="overlay" id="overlay" vid="18">
         <div class="loader-text" vid="19">INITIALIZING GALLERY...</div>
@@ -481,6 +543,8 @@
         const loaderText = document.querySelector('.loader-text');
         const weatherEl = document.getElementById('weather');
         const audioToggle = document.getElementById('audio-toggle');
+        const audioToggleButton = audioToggle.querySelector('.audio-toggle-btn');
+        const audioStatus = document.getElementById('audio-status');
         const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
         const ambientSecondary = document.getElementById('ambient-secondary');
 
@@ -799,9 +863,15 @@
         function updateAudioButton() {
             const isPlaying = audioIntent === 'playing';
             audioToggle.classList.toggle('is-playing', Boolean(isPlaying));
-            audioToggle.setAttribute('aria-label', isPlaying ? 'Pause album audio' : 'Play album audio');
-            audioToggle.setAttribute('title', isPlaying ? 'Pause album audio' : 'Play album audio');
-            audioToggle.disabled = !audioPaths.length;
+            audioToggle.classList.toggle('is-disabled', !audioPaths.length);
+            audioToggleButton.setAttribute('aria-label', isPlaying ? 'Pause album audio' : 'Play album audio');
+            audioToggleButton.setAttribute('title', isPlaying ? 'Pause album audio' : 'Play album audio');
+            audioToggleButton.disabled = !audioPaths.length;
+            audioStatus.textContent = !audioPaths.length
+                ? 'No Audio'
+                : isPlaying
+                    ? 'Sound On'
+                    : 'Sound Off';
         }
 
         function chooseNextAudioIndex(baseIndex = currentAudioIndex) {
@@ -1390,7 +1460,7 @@
             });
         });
 
-        audioToggle.addEventListener('click', () => {
+        audioToggleButton.addEventListener('click', () => {
             toggleAudioPlayback();
         });
 
