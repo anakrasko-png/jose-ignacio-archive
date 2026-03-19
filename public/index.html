@@ -378,29 +378,6 @@
             transform: none;
         }
 
-        .audio-status {
-            position: absolute;
-            left: 50%;
-            bottom: 64px;
-            transform: translateX(-50%);
-            min-width: max-content;
-            padding: 4px 9px;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--audio-bg) 92%, transparent);
-            border: 1px solid color-mix(in srgb, var(--audio-border) 85%, transparent);
-            color: var(--text-sub);
-            font-size: 9px;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            backdrop-filter: blur(10px);
-            transition: color 0.3s ease, background 0.3s ease, border-color 0.3s ease;
-        }
-
-        .audio-toggle.is-playing .audio-status {
-            color: var(--text-main);
-            background: color-mix(in srgb, var(--audio-active-bg) 96%, transparent);
-        }
-
         .audio-icon {
             width: 18px;
             height: 18px;
@@ -520,7 +497,6 @@
     </div>
 
     <div class="audio-toggle" id="audio-toggle">
-        <div class="audio-status" id="audio-status">Sound Off</div>
         <button type="button" class="audio-toggle-btn" aria-label="Play album audio" title="Play album audio">
             <svg class="audio-icon icon-play" viewBox="0 0 24 24" aria-hidden="true">
                 <polygon points="8,6 18,12 8,18"></polygon>
@@ -544,7 +520,6 @@
         const weatherEl = document.getElementById('weather');
         const audioToggle = document.getElementById('audio-toggle');
         const audioToggleButton = audioToggle.querySelector('.audio-toggle-btn');
-        const audioStatus = document.getElementById('audio-status');
         const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
         const ambientSecondary = document.getElementById('ambient-secondary');
 
@@ -867,11 +842,6 @@
             audioToggleButton.setAttribute('aria-label', isPlaying ? 'Pause album audio' : 'Play album audio');
             audioToggleButton.setAttribute('title', isPlaying ? 'Pause album audio' : 'Play album audio');
             audioToggleButton.disabled = !audioPaths.length;
-            audioStatus.textContent = !audioPaths.length
-                ? 'No Audio'
-                : isPlaying
-                    ? 'Sound On'
-                    : 'Sound Off';
         }
 
         function chooseNextAudioIndex(baseIndex = currentAudioIndex) {
