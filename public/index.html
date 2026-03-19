@@ -512,6 +512,7 @@
         let darkGradientPalettes = [];
         let activeGradientIndex = 0;
         let gradientCycleTimer = null;
+        let gridMediaObserver = null;
         let isDragging = false;
         let startX = 0;
         let lastX = 0;
@@ -1103,6 +1104,85 @@
             await playCurrentAudio();
         }
 
+        function ensureCardMediaLoaded(card) {
+            if (!card || card.dataset.loaded === 'true') {
+                return;
+            }
+
+            const index = Number(card.dataset.index);
+            const item = galleryItems[index];
+            const media = card.firstElementChild;
+            if (!item || !media) {
+                return;
+            }
+
+            if (item.type === 'video') {
+                media.src = encodeURI(item.path);
+                media.load();
+            } else {
+                media.src = encodeURI(item.path);
+            }
+
+            card.dataset.loaded = 'true';
+        }
+
+        function playCardVideo(card) {
+            const media = card?.firstElementChild;
+            if (!(media instanceof HTMLVideoElement)) {
+                return;
+            }
+
+            ensureCardMediaLoaded(card);
+            const playPromise = media.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {});
+            }
+        }
+
+        function pauseCardVideo(card) {
+            const media = card?.firstElementChild;
+            if (!(media instanceof HTMLVideoElement)) {
+                return;
+            }
+
+            media.pause();
+        }
+
+        function setupGridMediaObserver() {
+            if (gridMediaObserver) {
+                gridMediaObserver.disconnect();
+            }
+
+            gridMediaObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const card = entry.target;
+                    if (!(card instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    if (entry.isIntersecting) {
+                        ensureCardMediaLoaded(card);
+                        playCardVideo(card);
+                    } else {
+                        pauseCardVideo(card);
+                    }
+                });
+            }, {
+                root: null,
+                rootMargin: '300px 0px',
+                threshold: 0.05
+            });
+
+            cards.forEach((card) => gridMediaObserver.observe(card));
+        }
+
+        function teardownGridMediaObserver() {
+            if (gridMediaObserver) {
+                gridMediaObserver.disconnect();
+                gridMediaObserver = null;
+            }
+        }
+
         function buildCards() {
             strip.innerHTML = '';
             galleryItems.forEach((item, index) => {
@@ -1113,20 +1193,21 @@
                     : document.createElement('img');
 
                 if (item.type === 'video') {
-                    media.src = encodeURI(item.path);
                     media.muted = true;
                     media.loop = true;
-                    media.autoplay = true;
                     media.playsInline = true;
+                    media.preload = 'none';
                     media.setAttribute('aria-label', `Gallery video ${index + 1}`);
                 } else {
-                    media.src = encodeURI(item.path);
+                    media.loading = 'lazy';
+                    media.decoding = 'async';
                     media.alt = `Gallery image ${index + 1}`;
                 }
 
                 card.appendChild(media);
                 strip.appendChild(card);
                 card.dataset.index = index;
+                card.dataset.loaded = 'false';
             });
             cards = Array.from(document.querySelectorAll('.card'));
             applyLayout(currentLayout);
@@ -1160,7 +1241,13 @@
                 while (virtualIndex < -totalSetWidth / 2) virtualIndex += totalSetWidth;
                 while (virtualIndex > totalSetWidth / 2) virtualIndex -= totalSetWidth;
 
-                if (Math.abs(virtualIndex) < window.innerWidth) {
+                const distance = Math.abs(virtualIndex);
+
+                if (distance < window.innerWidth * 1.2) {
+                    ensureCardMediaLoaded(card);
+                }
+
+                if (distance < window.innerWidth) {
                     card.style.display = 'block';
 
                     const progress = virtualIndex / (window.innerWidth / 1.5);
@@ -1175,7 +1262,9 @@
                     `;
 
                     card.style.opacity = 1 - Math.pow(Math.abs(progress), 3);
+                    playCardVideo(card);
                 } else {
+                    pauseCardVideo(card);
                     card.style.display = 'none';
                 }
             });
@@ -1200,6 +1289,7 @@
 
             if (layout === 'grid') {
                 stopAnimation();
+                setupGridMediaObserver();
                 viewport.style.cursor = 'default';
                 cards.forEach((card) => {
                     card.style.display = 'block';
@@ -1209,6 +1299,7 @@
                 return;
             }
 
+            teardownGridMediaObserver();
             viewport.style.cursor = isDragging ? 'grabbing' : 'grab';
             if (!rafId) {
                 animate();
