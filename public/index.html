@@ -11,6 +11,10 @@
             --grad-2: rgba(176, 205, 214, 0.42);
             --grad-3: rgba(236, 228, 208, 0.65);
             --grad-4: rgba(168, 179, 150, 0.24);
+            --grad-alt-1: rgba(214, 196, 170, 0.42);
+            --grad-alt-2: rgba(176, 205, 214, 0.36);
+            --grad-alt-3: rgba(236, 228, 208, 0.52);
+            --grad-alt-4: rgba(168, 179, 150, 0.22);
             --card-bg: #e0e0e0;
             --card-shadow: rgba(0,0,0,0.05);
             --card-shadow-hover: rgba(0,0,0,0.1);
@@ -33,6 +37,10 @@
             --grad-2: rgba(96, 74, 55, 0.32);
             --grad-3: rgba(15, 25, 40, 0.78);
             --grad-4: rgba(126, 108, 79, 0.18);
+            --grad-alt-1: rgba(40, 61, 86, 0.4);
+            --grad-alt-2: rgba(96, 74, 55, 0.26);
+            --grad-alt-3: rgba(15, 25, 40, 0.64);
+            --grad-alt-4: rgba(126, 108, 79, 0.16);
             --card-bg: #1a1e24;
             --card-shadow: rgba(0,0,0,0.28);
             --card-shadow-hover: rgba(0,0,0,0.42);
@@ -66,17 +74,15 @@
             transition: background-color 0.8s ease, color 0.8s ease;
         }
 
-        body::before,
-        body::after {
-            content: "";
+        .ambient-gradient {
             position: fixed;
             inset: -14%;
             z-index: -2;
             pointer-events: none;
-            transition: opacity 1.2s ease;
+            transition: opacity 2.4s ease;
         }
 
-        body::before {
+        .ambient-gradient.primary {
             background:
                 radial-gradient(circle at 18% 22%, var(--grad-1) 0, transparent 42%),
                 radial-gradient(circle at 78% 20%, var(--grad-2) 0, transparent 38%),
@@ -85,13 +91,19 @@
             opacity: 0.95;
         }
 
-        body::after {
+        .ambient-gradient.secondary {
             background:
-                radial-gradient(circle at 26% 78%, var(--grad-4) 0, transparent 34%),
-                radial-gradient(circle at 82% 68%, var(--grad-2) 0, transparent 30%);
-            filter: blur(28px);
+                radial-gradient(circle at 16% 78%, var(--grad-alt-1) 0, transparent 36%),
+                radial-gradient(circle at 78% 18%, var(--grad-alt-2) 0, transparent 32%),
+                radial-gradient(circle at 52% 66%, var(--grad-alt-3) 0, transparent 46%),
+                radial-gradient(circle at 84% 72%, var(--grad-alt-4) 0, transparent 28%);
+            filter: blur(34px);
             animation: driftTwo 30s ease-in-out infinite alternate;
-            opacity: 0.75;
+            opacity: 0.55;
+        }
+
+        .ambient-gradient.secondary.is-shifted {
+            opacity: 0.9;
         }
 
         body.grid-mode {
@@ -411,6 +423,9 @@
 </head>
 <body vid="6">
 
+    <div class="ambient-gradient primary" aria-hidden="true"></div>
+    <div class="ambient-gradient secondary" id="ambient-secondary" aria-hidden="true"></div>
+
     <header vid="7">
         <div class="brand" vid="8">JOSÉ IGNACIO ARCHIVE</div>
         <div class="meta" vid="9">
@@ -466,6 +481,7 @@
         const weatherEl = document.getElementById('weather');
         const audioToggle = document.getElementById('audio-toggle');
         const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
+        const ambientSecondary = document.getElementById('ambient-secondary');
 
         const cardWidth = 220;
         const visibleRange = 2000;
@@ -481,8 +497,10 @@
         let targetScroll = 0;
         let currentLayout = 'rotate';
         let currentIsDay = true;
-        let lightGradientPalette = null;
-        let darkGradientPalette = null;
+        let lightGradientPalettes = [];
+        let darkGradientPalettes = [];
+        let activeGradientIndex = 0;
+        let gradientCycleTimer = null;
         let isDragging = false;
         let startX = 0;
         let lastX = 0;
@@ -565,22 +583,65 @@
             return true;
         }
 
-        function applyGradientPalette(palette) {
+        function applyGradientPalette(palette, prefix = '--grad') {
             if (!palette || palette.length < 4) {
                 return;
             }
 
-            document.documentElement.style.setProperty('--grad-1', palette[0]);
-            document.documentElement.style.setProperty('--grad-2', palette[1]);
-            document.documentElement.style.setProperty('--grad-3', palette[2]);
-            document.documentElement.style.setProperty('--grad-4', palette[3]);
+            document.documentElement.style.setProperty(`${prefix}-1`, palette[0]);
+            document.documentElement.style.setProperty(`${prefix}-2`, palette[1]);
+            document.documentElement.style.setProperty(`${prefix}-3`, palette[2]);
+            document.documentElement.style.setProperty(`${prefix}-4`, palette[3]);
+        }
+
+        function getCurrentGradientPalettes() {
+            return currentIsDay ? lightGradientPalettes : darkGradientPalettes;
+        }
+
+        function crossfadeToGradient(index) {
+            const palettes = getCurrentGradientPalettes();
+            if (!palettes.length) {
+                return;
+            }
+
+            const normalizedIndex = index % palettes.length;
+            const palette = palettes[normalizedIndex];
+            if (!palette) {
+                return;
+            }
+
+            applyGradientPalette(palette.primary, '--grad');
+            applyGradientPalette(palette.secondary, '--grad-alt');
+            activeGradientIndex = normalizedIndex;
+
+            ambientSecondary.classList.remove('is-shifted');
+            requestAnimationFrame(() => {
+                ambientSecondary.classList.add('is-shifted');
+            });
+        }
+
+        function startGradientCycle() {
+            if (gradientCycleTimer) {
+                window.clearInterval(gradientCycleTimer);
+            }
+
+            const palettes = getCurrentGradientPalettes();
+            if (palettes.length < 2) {
+                return;
+            }
+
+            gradientCycleTimer = window.setInterval(() => {
+                const nextIndex = (activeGradientIndex + 1) % palettes.length;
+                crossfadeToGradient(nextIndex);
+            }, 9000);
         }
 
         function applyThemeMode(isDay) {
             document.body.classList.toggle('night-mode', !isDay);
-            const palette = isDay ? lightGradientPalette : darkGradientPalette;
-            if (palette) {
-                applyGradientPalette(palette);
+            const palettes = getCurrentGradientPalettes();
+            if (palettes.length) {
+                crossfadeToGradient(Math.min(activeGradientIndex, palettes.length - 1));
+                startGradientCycle();
             }
         }
 
@@ -634,6 +695,38 @@
             });
         }
 
+        function buildPaletteVariants(sourceColors, alphaSet) {
+            if (!sourceColors.length) {
+                return [];
+            }
+
+            const variants = [];
+            const chunkCount = Math.min(4, Math.max(2, Math.ceil(sourceColors.length / 3)));
+            const chunkSize = Math.max(1, Math.floor(sourceColors.length / chunkCount));
+
+            for (let i = 0; i < chunkCount; i += 1) {
+                const start = i * chunkSize;
+                const slice = sourceColors.slice(start, start + chunkSize);
+                const pool = slice.length ? slice : sourceColors;
+                variants.push({
+                    primary: [
+                        rgbToRgba(pool[0] || sourceColors[0], alphaSet.primary[0]),
+                        rgbToRgba(pool[Math.floor(pool.length / 3)] || pool[0] || sourceColors[0], alphaSet.primary[1]),
+                        rgbToRgba(pool[Math.floor((pool.length * 2) / 3)] || pool[pool.length - 1] || sourceColors[0], alphaSet.primary[2]),
+                        rgbToRgba(pool[pool.length - 1] || sourceColors[sourceColors.length - 1], alphaSet.primary[3])
+                    ],
+                    secondary: [
+                        rgbToRgba(pool[pool.length - 1] || sourceColors[0], alphaSet.secondary[0]),
+                        rgbToRgba(pool[Math.floor(pool.length / 2)] || pool[0] || sourceColors[0], alphaSet.secondary[1]),
+                        rgbToRgba(pool[0] || sourceColors[0], alphaSet.secondary[2]),
+                        rgbToRgba(sourceColors[(start + Math.floor(chunkSize / 2)) % sourceColors.length] || pool[0], alphaSet.secondary[3])
+                    ]
+                });
+            }
+
+            return variants;
+        }
+
         async function deriveGradientPalettes(paths) {
             const samplePaths = paths.slice(0, 36);
             const colors = (await Promise.all(
@@ -650,19 +743,15 @@
             const bright = sorted.slice(0, Math.max(6, Math.min(12, sorted.length)));
             const dark = sorted.slice(-Math.max(6, Math.min(12, sorted.length)));
 
-            lightGradientPalette = [
-                rgbToRgba(bright[0] || sorted[0], 0.54),
-                rgbToRgba(bright[Math.floor(bright.length / 2)] || sorted[1] || sorted[0], 0.42),
-                rgbToRgba(bright[bright.length - 1] || sorted[2] || sorted[0], 0.64),
-                rgbToRgba(sorted[Math.floor(sorted.length / 2)] || bright[0], 0.24)
-            ];
+            lightGradientPalettes = buildPaletteVariants(bright, {
+                primary: [0.56, 0.42, 0.62, 0.24],
+                secondary: [0.36, 0.3, 0.4, 0.22]
+            });
 
-            darkGradientPalette = [
-                rgbToRgba(dark[0] || sorted[sorted.length - 1], 0.48),
-                rgbToRgba(dark[Math.floor(dark.length / 2)] || sorted[sorted.length - 2] || sorted[0], 0.32),
-                rgbToRgba(dark[dark.length - 1] || sorted[sorted.length - 1], 0.78),
-                rgbToRgba(sorted[Math.max(0, Math.floor(sorted.length / 2) - 1)] || dark[0], 0.18)
-            ];
+            darkGradientPalettes = buildPaletteVariants(dark.reverse(), {
+                primary: [0.48, 0.34, 0.76, 0.18],
+                secondary: [0.34, 0.28, 0.42, 0.16]
+            });
 
             applyThemeMode(currentIsDay);
         }
