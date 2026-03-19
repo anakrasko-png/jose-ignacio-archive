@@ -473,9 +473,6 @@
         const weatherEl = document.getElementById('weather');
         const audioToggle = document.getElementById('audio-toggle');
         const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
-        const galleryFolder = 'Images';
-
-        
         const cardWidth = 220; 
         const visibleRange = 2000; 
         const perspectiveDepth = 800; 
@@ -499,7 +496,7 @@
         let rafId;
 
         async function loadImagePaths() {
-            const response = await fetch(`/api/gallery?folder=${encodeURIComponent(galleryFolder)}`, {
+            const response = await fetch('/data/gallery.json', {
                 cache: 'no-store'
             });
             if (!response.ok) {
@@ -527,7 +524,7 @@
         }
 
         async function loadAudioPaths() {
-            const response = await fetch(`/api/audio?folder=${encodeURIComponent(galleryFolder)}`, {
+            const response = await fetch('/data/audio.json', {
                 cache: 'no-store'
             });
             if (!response.ok) {
