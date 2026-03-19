@@ -810,7 +810,7 @@
 
         function createHiddenAudioPlayer() {
             const player = document.createElement('video');
-            player.preload = 'metadata';
+            player.preload = 'auto';
             player.playsInline = true;
             player.muted = false;
             player.volume = 1;
@@ -862,6 +862,76 @@
             player.load();
         }
 
+        function waitForPlayable(player) {
+            if (!player) {
+                return Promise.reject(new Error('Missing audio player'));
+            }
+
+            if (player.readyState >= 3) {
+                return Promise.resolve();
+            }
+
+            return new Promise((resolve, reject) => {
+                let settled = false;
+                const cleanup = () => {
+                    player.removeEventListener('canplay', onReady);
+                    player.removeEventListener('loadeddata', onReady);
+                    player.removeEventListener('error', onError);
+                    window.clearTimeout(timeoutId);
+                };
+                const finish = (callback) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    cleanup();
+                    callback();
+                };
+                const onReady = () => finish(resolve);
+                const onError = () => finish(() => reject(new Error('Unable to load queued audio source')));
+                const timeoutId = window.setTimeout(() => finish(resolve), 4000);
+
+                player.addEventListener('canplay', onReady, { once: true });
+                player.addEventListener('loadeddata', onReady, { once: true });
+                player.addEventListener('error', onError, { once: true });
+            });
+        }
+
+        async function hardSwitchToAudioIndex(index) {
+            const activePlayer = getActiveAudioPlayer();
+            if (!activePlayer || index < 0 || index >= audioPaths.length) {
+                audioIntent = 'paused';
+                updateAudioButton();
+                return;
+            }
+
+            isCrossfading = false;
+            currentAudioIndex = index;
+            queuedAudioIndex = -1;
+            audioPlayers.forEach((player, playerIndex) => {
+                if (playerIndex !== activeAudioDeck) {
+                    resetAudioPlayer(player);
+                }
+            });
+
+            setPlayerSource(activePlayer, index);
+
+            try {
+                await waitForPlayable(activePlayer);
+                activePlayer.volume = 1;
+                await activePlayer.play();
+                if (audioIntent === 'playing') {
+                    primeQueuedAudioPlayer().catch((error) => {
+                        console.error(error);
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                audioIntent = 'paused';
+                updateAudioButton();
+            }
+        }
+
         function ensureAudioPlayers() {
             if (!audioPaths.length) {
                 audioToggle.disabled = true;
@@ -909,6 +979,7 @@
             updateAudioButton();
 
             try {
+                await waitForPlayable(activePlayer);
                 activePlayer.volume = 1;
                 await activePlayer.play();
                 primeQueuedAudioPlayer().catch((error) => {
@@ -962,15 +1033,20 @@
             }
 
             isCrossfading = true;
+            const alreadyQueued = queuedAudioIndex === nextIndex && Boolean(queuedPlayer.getAttribute('src'));
             queuedAudioIndex = nextIndex;
-            setPlayerSource(queuedPlayer, nextIndex);
+            if (!alreadyQueued) {
+                setPlayerSource(queuedPlayer, nextIndex);
+            }
             queuedPlayer.volume = 0;
 
             try {
+                await waitForPlayable(queuedPlayer);
                 await queuedPlayer.play();
             } catch (error) {
                 console.error(error);
                 isCrossfading = false;
+                await hardSwitchToAudioIndex(nextIndex);
                 return;
             }
 
