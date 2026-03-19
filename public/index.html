@@ -490,13 +490,19 @@
         let imagePaths = [];
         let audioPaths = [];
         let cards = [];
-        let audioPlayers = [];
-        let activeAudioDeck = 0;
         let currentAudioIndex = -1;
-        let queuedAudioIndex = -1;
         let audioIntent = 'paused';
+        let audioContext = null;
+        const decodedAudioCache = new Map();
+        let currentAudioBuffer = null;
+        let currentAudioSource = null;
+        let currentAudioGain = null;
+        let currentAudioStartedAt = 0;
+        let currentAudioOffset = 0;
+        let queuedAudioBuffer = null;
+        let queuedAudioIndex = -1;
+        let audioTransitionTimer = null;
         let isCrossfading = false;
-        let audioWatchdogTimer = null;
         let currentScroll = 0;
         let targetScroll = 0;
         let currentLayout = 'rotate';
@@ -512,6 +518,7 @@
         let rafId;
         const audioFadeLeadSeconds = 4.5;
         const audioCrossfadeDurationMs = 3200;
+        const audioCrossfadeDurationSeconds = audioCrossfadeDurationMs / 1000;
 
         async function loadImagePaths() {
             const response = await fetch('/data/gallery.json', {
@@ -561,9 +568,13 @@
             audioPaths = latestAudioPaths;
 
             if (!audioPaths.length) {
-                audioPlayers.forEach(resetAudioPlayer);
+                clearAudioTransitionTimer();
+                stopCurrentAudioNodes();
                 currentAudioIndex = -1;
                 queuedAudioIndex = -1;
+                queuedAudioBuffer = null;
+                currentAudioBuffer = null;
+                currentAudioOffset = 0;
                 audioIntent = 'paused';
                 isCrossfading = false;
                 updateAudioButton();
@@ -572,24 +583,6 @@
 
             if (currentAudioIndex >= audioPaths.length) {
                 currentAudioIndex = 0;
-            }
-
-            if (audioPlayers.length) {
-                const activePlayer = getActiveAudioPlayer();
-                const activePath = decodeURI(activePlayer?.getAttribute('src') || '');
-                if (activePath && !audioPaths.includes(activePath)) {
-                    resetAllAudioPlayers();
-                    currentAudioIndex = 0;
-                    queuedAudioIndex = -1;
-                    audioIntent = 'paused';
-                }
-
-                const queuedPlayer = getQueuedAudioPlayer();
-                const queuedPath = decodeURI(queuedPlayer?.getAttribute('src') || '');
-                if (queuedPath && !audioPaths.includes(queuedPath)) {
-                    resetAudioPlayer(queuedPlayer);
-                    queuedAudioIndex = -1;
-                }
             }
 
             updateAudioButton();
@@ -784,240 +777,135 @@
             return (baseIndex + 1 + audioPaths.length) % audioPaths.length;
         }
 
-        function getActiveAudioPlayer() {
-            return audioPlayers[activeAudioDeck] || null;
-        }
-
-        function getQueuedAudioPlayer() {
-            return audioPlayers[(activeAudioDeck + 1) % 2] || null;
-        }
-
-        function resetAudioPlayer(player) {
-            if (!player) {
-                return;
+        function ensureAudioContext() {
+            if (!audioContext) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) {
+                    throw new Error('Web Audio API is unavailable in this browser');
+                }
+                audioContext = new AudioContextClass();
             }
-
-            player.pause();
-            player.removeAttribute('src');
-            player.load();
-            player.volume = 1;
-            player.dataset.index = '';
+            return audioContext;
         }
 
-        function resetAllAudioPlayers() {
-            isCrossfading = false;
-            audioPlayers.forEach(resetAudioPlayer);
-        }
-
-        function stopAudioWatchdog() {
-            if (audioWatchdogTimer) {
-                window.clearInterval(audioWatchdogTimer);
-                audioWatchdogTimer = null;
+        function clearAudioTransitionTimer() {
+            if (audioTransitionTimer) {
+                window.clearTimeout(audioTransitionTimer);
+                audioTransitionTimer = null;
             }
         }
 
-        function startAudioWatchdog() {
-            stopAudioWatchdog();
-            audioWatchdogTimer = window.setInterval(() => {
-                if (audioIntent !== 'playing' || isCrossfading) {
-                    return;
-                }
-
-                const activePlayer = getActiveAudioPlayer();
-                if (!activePlayer || !activePlayer.getAttribute('src')) {
-                    return;
-                }
-
-                if (activePlayer.error) {
-                    hardSwitchToAudioIndex(chooseNextAudioIndex(currentAudioIndex)).catch((error) => {
-                        console.error(error);
-                    });
-                    return;
-                }
-
-                if (Number.isFinite(activePlayer.duration)) {
-                    const remaining = activePlayer.duration - activePlayer.currentTime;
-                    if (remaining <= 0.35) {
-                        crossfadeToNextAudio(0).catch((error) => {
-                            console.error(error);
-                        });
-                        return;
-                    }
-                }
-
-                if (activePlayer.paused && activePlayer.currentTime > 0 && !activePlayer.ended) {
-                    hardSwitchToAudioIndex(chooseNextAudioIndex(currentAudioIndex)).catch((error) => {
-                        console.error(error);
-                    });
-                }
-            }, 1500);
-        }
-
-        function createHiddenAudioPlayer() {
-            const player = document.createElement('video');
-            player.preload = 'auto';
-            player.playsInline = true;
-            player.muted = false;
-            player.volume = 1;
-            player.style.position = 'fixed';
-            player.style.width = '1px';
-            player.style.height = '1px';
-            player.style.opacity = '0';
-            player.style.pointerEvents = 'none';
-            player.style.left = '-9999px';
-            player.style.bottom = '0';
-            player.addEventListener('timeupdate', () => {
-                const activePlayer = getActiveAudioPlayer();
-                if (player !== activePlayer || audioIntent !== 'playing' || isCrossfading || audioPaths.length < 2) {
-                    return;
-                }
-
-                if (!Number.isFinite(player.duration)) {
-                    return;
-                }
-
-                const remaining = player.duration - player.currentTime;
-                if (remaining <= audioFadeLeadSeconds) {
-                    crossfadeToNextAudio();
+        function stopCurrentAudioNodes() {
+            [currentAudioSource, currentAudioGain].forEach((node) => {
+                try {
+                    node?.disconnect();
+                } catch (error) {
+                    console.error(error);
                 }
             });
-            player.addEventListener('ended', () => {
-                if (player !== getActiveAudioPlayer() || isCrossfading) {
-                    return;
-                }
-                crossfadeToNextAudio(0);
-            });
-            player.addEventListener('error', (error) => {
-                console.error(error);
-                if (player === getActiveAudioPlayer()) {
-                    crossfadeToNextAudio(0);
-                }
-            });
-            document.body.appendChild(player);
-            return player;
-        }
-
-        function setPlayerSource(player, index) {
-            if (!player || index < 0 || index >= audioPaths.length) {
-                return;
-            }
-
-            player.src = encodeURI(audioPaths[index]);
-            player.dataset.index = String(index);
-            player.load();
-        }
-
-        function waitForPlayable(player) {
-            if (!player) {
-                return Promise.reject(new Error('Missing audio player'));
-            }
-
-            if (player.readyState >= 3) {
-                return Promise.resolve();
-            }
-
-            return new Promise((resolve, reject) => {
-                let settled = false;
-                const cleanup = () => {
-                    player.removeEventListener('canplay', onReady);
-                    player.removeEventListener('loadeddata', onReady);
-                    player.removeEventListener('error', onError);
-                    window.clearTimeout(timeoutId);
-                };
-                const finish = (callback) => {
-                    if (settled) {
-                        return;
-                    }
-                    settled = true;
-                    cleanup();
-                    callback();
-                };
-                const onReady = () => finish(resolve);
-                const onError = () => finish(() => reject(new Error('Unable to load queued audio source')));
-                const timeoutId = window.setTimeout(() => finish(resolve), 4000);
-
-                player.addEventListener('canplay', onReady, { once: true });
-                player.addEventListener('loadeddata', onReady, { once: true });
-                player.addEventListener('error', onError, { once: true });
-            });
-        }
-
-        async function hardSwitchToAudioIndex(index) {
-            const activePlayer = getActiveAudioPlayer();
-            if (!activePlayer || index < 0 || index >= audioPaths.length) {
-                audioIntent = 'paused';
-                updateAudioButton();
-                return;
-            }
-
-            isCrossfading = false;
-            currentAudioIndex = index;
-            queuedAudioIndex = -1;
-            audioPlayers.forEach((player, playerIndex) => {
-                if (playerIndex !== activeAudioDeck) {
-                    resetAudioPlayer(player);
-                }
-            });
-
-            setPlayerSource(activePlayer, index);
-
             try {
-                await waitForPlayable(activePlayer);
-                activePlayer.volume = 1;
-                await activePlayer.play();
-                startAudioWatchdog();
-                if (audioIntent === 'playing') {
-                    primeQueuedAudioPlayer().catch((error) => {
-                        console.error(error);
-                    });
-                }
+                currentAudioSource?.stop();
             } catch (error) {
                 console.error(error);
-                audioIntent = 'paused';
-                updateAudioButton();
             }
+            currentAudioSource = null;
+            currentAudioGain = null;
         }
 
-        function ensureAudioPlayers() {
+        async function getDecodedAudioBuffer(index) {
+            if (index < 0 || index >= audioPaths.length) {
+                throw new Error('Audio index is out of range');
+            }
+
+            if (decodedAudioCache.has(index)) {
+                return decodedAudioCache.get(index);
+            }
+
+            const response = await fetch(encodeURI(audioPaths[index]), { cache: 'force-cache' });
+            if (!response.ok) {
+                throw new Error(`Audio media request failed with ${response.status}`);
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            const context = ensureAudioContext();
+            const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
+            decodedAudioCache.set(index, decoded);
+            return decoded;
+        }
+
+        function getCurrentPlaybackOffset() {
+            if (!currentAudioBuffer) {
+                return 0;
+            }
+
+            if (!currentAudioSource || audioIntent !== 'playing') {
+                return Math.min(currentAudioOffset, currentAudioBuffer.duration);
+            }
+
+            const elapsed = audioContext.currentTime - currentAudioStartedAt;
+            return Math.min(currentAudioOffset + elapsed, currentAudioBuffer.duration);
+        }
+
+        function createPlaybackNodes(buffer, startOffset = 0, initialGain = 1) {
+            const context = ensureAudioContext();
+            const source = context.createBufferSource();
+            const gain = context.createGain();
+            source.buffer = buffer;
+            source.connect(gain);
+            gain.connect(context.destination);
+            gain.gain.setValueAtTime(initialGain, context.currentTime);
+            source.start(context.currentTime, Math.max(0, Math.min(startOffset, Math.max(0, buffer.duration - 0.01))));
+            return { source, gain, startedAt: context.currentTime };
+        }
+
+        async function findPlayableAudio(startIndex) {
             if (!audioPaths.length) {
-                audioToggle.disabled = true;
-                return false;
+                throw new Error('No audio files are available');
             }
 
-            if (!audioPlayers.length) {
-                audioPlayers = [
-                    createHiddenAudioPlayer(),
-                    createHiddenAudioPlayer()
-                ];
+            for (let step = 0; step < audioPaths.length; step += 1) {
+                const index = (startIndex + step) % audioPaths.length;
+                try {
+                    const buffer = await getDecodedAudioBuffer(index);
+                    return { index, buffer };
+                } catch (error) {
+                    console.error(`Skipping unplayable audio source: ${audioPaths[index]}`, error);
+                }
             }
 
-            return true;
+            throw new Error('No playable audio tracks were found');
         }
 
-        async function primeQueuedAudioPlayer() {
-            if (audioPaths.length < 2) {
+        async function primeQueuedAudioBuffer() {
+            if (audioPaths.length < 2 || currentAudioIndex < 0) {
                 queuedAudioIndex = -1;
+                queuedAudioBuffer = null;
                 return;
             }
 
-            const queuedPlayer = getQueuedAudioPlayer();
-            const nextIndex = chooseNextAudioIndex(currentAudioIndex);
-            if (!queuedPlayer || nextIndex < 0) {
+            const playable = await findPlayableAudio(chooseNextAudioIndex(currentAudioIndex));
+            queuedAudioIndex = playable.index;
+            queuedAudioBuffer = playable.buffer;
+        }
+
+        function scheduleNextTransition() {
+            clearAudioTransitionTimer();
+
+            if (!currentAudioBuffer || audioIntent !== 'playing') {
                 return;
             }
 
-            if (queuedAudioIndex === nextIndex && queuedPlayer.getAttribute('src')) {
-                return;
-            }
-
-            queuedAudioIndex = nextIndex;
-            queuedPlayer.volume = 0;
-            setPlayerSource(queuedPlayer, nextIndex);
+            const remaining = currentAudioBuffer.duration - getCurrentPlaybackOffset();
+            const delayMs = Math.max(0, (remaining - audioFadeLeadSeconds) * 1000);
+            audioTransitionTimer = window.setTimeout(() => {
+                crossfadeToNextAudio().catch((error) => {
+                    console.error(error);
+                });
+            }, delayMs);
         }
 
         async function playCurrentAudio() {
-            const activePlayer = getActiveAudioPlayer();
-            if (!activePlayer) {
+            if (!currentAudioBuffer) {
                 return;
             }
 
@@ -1025,11 +913,23 @@
             updateAudioButton();
 
             try {
-                await waitForPlayable(activePlayer);
-                activePlayer.volume = 1;
-                await activePlayer.play();
-                startAudioWatchdog();
-                primeQueuedAudioPlayer().catch((error) => {
+                const context = ensureAudioContext();
+                await context.resume();
+                stopCurrentAudioNodes();
+                const { source, gain, startedAt } = createPlaybackNodes(currentAudioBuffer, currentAudioOffset, 1);
+                currentAudioSource = source;
+                currentAudioGain = gain;
+                currentAudioStartedAt = startedAt;
+                source.onended = () => {
+                    if (source !== currentAudioSource || isCrossfading || audioIntent !== 'playing') {
+                        return;
+                    }
+                    crossfadeToNextAudio(0).catch((error) => {
+                        console.error(error);
+                    });
+                };
+                scheduleNextTransition();
+                primeQueuedAudioBuffer().catch((error) => {
                     console.error(error);
                 });
                 updateAudioButton();
@@ -1046,114 +946,103 @@
 
         function pauseCurrentAudio() {
             isCrossfading = false;
+            clearAudioTransitionTimer();
             audioIntent = 'paused';
-            stopAudioWatchdog();
-            audioPlayers.forEach((player) => {
-                if (player) {
-                    player.pause();
-                }
-            });
+            currentAudioOffset = getCurrentPlaybackOffset();
+            stopCurrentAudioNodes();
             updateAudioButton();
         }
 
         async function crossfadeToNextAudio(durationMs = audioCrossfadeDurationMs) {
-            if (isCrossfading || !(await refreshAudioSources()) || !ensureAudioPlayers()) {
+            if (isCrossfading || !(await refreshAudioSources())) {
                 audioIntent = 'paused';
                 updateAudioButton();
                 return;
             }
 
-            const activePlayer = getActiveAudioPlayer();
-            const queuedPlayer = getQueuedAudioPlayer();
-            if (!activePlayer || !queuedPlayer) {
-                return;
-            }
-
-            const nextIndex = chooseNextAudioIndex(currentAudioIndex);
-            if (nextIndex < 0) {
-                return;
-            }
-
-            if (audioPaths.length === 1 && currentAudioIndex === nextIndex) {
-                activePlayer.currentTime = 0;
+            if (!currentAudioBuffer || currentAudioIndex < 0) {
+                const playable = await findPlayableAudio(0);
+                currentAudioIndex = playable.index;
+                currentAudioBuffer = playable.buffer;
+                currentAudioOffset = 0;
                 await playCurrentAudio();
                 return;
             }
 
+            const context = ensureAudioContext();
+            await context.resume();
+
             isCrossfading = true;
-            const alreadyQueued = queuedAudioIndex === nextIndex && Boolean(queuedPlayer.getAttribute('src'));
-            queuedAudioIndex = nextIndex;
-            if (!alreadyQueued) {
-                setPlayerSource(queuedPlayer, nextIndex);
+            clearAudioTransitionTimer();
+
+            if (queuedAudioIndex < 0 || !queuedAudioBuffer) {
+                const playable = await findPlayableAudio(chooseNextAudioIndex(currentAudioIndex));
+                queuedAudioIndex = playable.index;
+                queuedAudioBuffer = playable.buffer;
             }
-            queuedPlayer.volume = 0;
 
             try {
-                await waitForPlayable(queuedPlayer);
-                await queuedPlayer.play();
+                const { source: incomingSource, gain: incomingGain, startedAt } = createPlaybackNodes(queuedAudioBuffer, 0, 0);
+                const outgoingSource = currentAudioSource;
+                const outgoingGain = currentAudioGain;
+
+                incomingSource.onended = () => {
+                    if (incomingSource !== currentAudioSource || isCrossfading || audioIntent !== 'playing') {
+                        return;
+                    }
+                    crossfadeToNextAudio(0).catch((error) => {
+                        console.error(error);
+                    });
+                };
+
+                const now = context.currentTime;
+                const fadeSeconds = durationMs / 1000;
+                incomingGain.gain.setValueAtTime(0, now);
+                incomingGain.gain.linearRampToValueAtTime(1, now + fadeSeconds);
+
+                if (outgoingGain) {
+                    outgoingGain.gain.cancelScheduledValues(now);
+                    outgoingGain.gain.setValueAtTime(outgoingGain.gain.value, now);
+                    outgoingGain.gain.linearRampToValueAtTime(0, now + fadeSeconds);
+                }
+
+                currentAudioSource = incomingSource;
+                currentAudioGain = incomingGain;
+                currentAudioBuffer = queuedAudioBuffer;
+                currentAudioIndex = queuedAudioIndex;
+                currentAudioOffset = 0;
+                currentAudioStartedAt = startedAt;
+                queuedAudioBuffer = null;
+                queuedAudioIndex = -1;
+
+                window.setTimeout(() => {
+                    try {
+                        outgoingSource?.stop();
+                        outgoingSource?.disconnect();
+                        outgoingGain?.disconnect();
+                    } catch (error) {
+                        console.error(error);
+                    }
+                }, durationMs + 120);
             } catch (error) {
                 console.error(error);
                 isCrossfading = false;
-                await hardSwitchToAudioIndex(nextIndex);
+                const playable = await findPlayableAudio(chooseNextAudioIndex(currentAudioIndex));
+                currentAudioIndex = playable.index;
+                currentAudioBuffer = playable.buffer;
+                currentAudioOffset = 0;
+                await playCurrentAudio();
                 return;
             }
-
-            const outgoingPlayer = activePlayer;
-            const incomingPlayer = queuedPlayer;
-            const fadeStart = performance.now();
-
-            await new Promise((resolve) => {
-                const step = (now) => {
-                    const progress = durationMs <= 0 ? 1 : Math.min((now - fadeStart) / durationMs, 1);
-                    outgoingPlayer.volume = Math.max(0, 1 - progress);
-                    incomingPlayer.volume = Math.min(1, progress);
-
-                    if (progress < 1 && audioIntent === 'playing') {
-                        requestAnimationFrame(step);
-                        return;
-                    }
-
-                    resolve();
-                };
-
-                requestAnimationFrame(step);
-            });
-
-            if (audioIntent !== 'playing') {
-                incomingPlayer.pause();
-                incomingPlayer.currentTime = 0;
-                incomingPlayer.volume = 1;
-                resetAudioPlayer(incomingPlayer);
-                isCrossfading = false;
-                return;
-            }
-
-            outgoingPlayer.pause();
-            outgoingPlayer.currentTime = 0;
-            outgoingPlayer.volume = 1;
-            outgoingPlayer.removeAttribute('src');
-            outgoingPlayer.load();
-            incomingPlayer.volume = 1;
-
-            activeAudioDeck = (activeAudioDeck + 1) % 2;
-            currentAudioIndex = nextIndex;
-            queuedAudioIndex = -1;
             isCrossfading = false;
-            startAudioWatchdog();
-
-            if (audioIntent === 'playing') {
-                primeQueuedAudioPlayer().catch((error) => {
-                    console.error(error);
-                });
-            }
+            scheduleNextTransition();
+            primeQueuedAudioBuffer().catch((error) => {
+                console.error(error);
+            });
         }
 
         async function toggleAudioPlayback() {
             if (!(await refreshAudioSources())) {
-                return;
-            }
-
-            if (!ensureAudioPlayers()) {
                 return;
             }
 
@@ -1162,10 +1051,20 @@
                 return;
             }
 
-            const activePlayer = getActiveAudioPlayer();
-            if (!activePlayer?.getAttribute('src')) {
-                currentAudioIndex = currentAudioIndex >= 0 ? currentAudioIndex : chooseNextAudioIndex(-1);
-                setPlayerSource(activePlayer, currentAudioIndex);
+            try {
+                ensureAudioContext();
+            } catch (error) {
+                console.error(error);
+                audioIntent = 'paused';
+                updateAudioButton();
+                return;
+            }
+
+            if (!currentAudioBuffer || currentAudioIndex < 0) {
+                const playable = await findPlayableAudio(0);
+                currentAudioIndex = playable.index;
+                currentAudioBuffer = playable.buffer;
+                currentAudioOffset = 0;
             }
 
             await playCurrentAudio();
