@@ -21,7 +21,7 @@
             --audio-border: rgba(0,0,0,0.12);
             --audio-bg: rgba(240, 242, 244, 0.88);
             --audio-active-bg: rgba(255,255,255,0.6);
-            --font-stack: 'Courier New', Courier, monospace; 
+            --font-stack: 'Courier New', Courier, monospace;
             --curve-intensity: 600px;
         }
 
@@ -102,7 +102,6 @@
             justify-content: flex-start;
         }
 
-        
         header {
             position: fixed;
             top: 0;
@@ -113,7 +112,7 @@
             justify-content: space-between;
             align-items: flex-start;
             z-index: 100;
-            pointer-events: none; 
+            pointer-events: none;
             mix-blend-mode: multiply;
         }
 
@@ -131,7 +130,6 @@
             line-height: 1.4;
         }
 
-        
         .gallery-viewport {
             position: absolute;
             top: 50%;
@@ -139,7 +137,7 @@
             transform: translate(-50%, -50%);
             width: 100vw;
             height: 40vh;
-            perspective: 1200px; 
+            perspective: 1200px;
             overflow: visible;
             cursor: grab;
             display: flex;
@@ -183,20 +181,18 @@
             will-change: auto;
         }
 
-        
         .card {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 200px; 
-            height: 260px; 
-            margin-left: -100px; 
+            width: 200px;
+            height: 260px;
+            margin-left: -100px;
             margin-top: -130px;
             background: var(--card-bg);
             transform-style: preserve-3d;
             will-change: transform, opacity;
-            
-            box-shadow: 0 10px 40px var(--card-shadow); 
+            box-shadow: 0 10px 40px var(--card-shadow);
             transition: box-shadow 0.4s ease;
         }
 
@@ -218,15 +214,14 @@
             height: 100%;
             object-fit: cover;
             display: block;
-            filter: grayscale(20%) contrast(95%); 
+            filter: grayscale(20%) contrast(95%);
         }
 
         .card:hover {
             box-shadow: 0 20px 60px var(--card-shadow-hover);
-            z-index: 1000 !important; 
+            z-index: 1000 !important;
         }
 
-        
         .layout-toggle-container {
             position: fixed;
             left: 50%;
@@ -386,7 +381,6 @@
             }
         }
 
-        
         .overlay {
             position: fixed;
             top: 0;
@@ -401,7 +395,7 @@
             transition: opacity 1s ease-in-out;
             pointer-events: none;
         }
-        
+
         .loader-text {
             font-size: 10px;
             letter-spacing: 0.2em;
@@ -427,7 +421,7 @@
 
     <div class="gallery-viewport" id="viewport" vid="11">
         <div class="strip-container" id="strip" vid="12">
-            
+
         </div>
     </div>
 
@@ -465,7 +459,6 @@
     </div>
 
     <script vid="20">
-        
         const strip = document.getElementById('strip');
         const viewport = document.getElementById('viewport');
         const overlay = document.getElementById('overlay');
@@ -473,9 +466,10 @@
         const weatherEl = document.getElementById('weather');
         const audioToggle = document.getElementById('audio-toggle');
         const toggleButtons = Array.from(document.querySelectorAll('.toggle-btn'));
-        const cardWidth = 220; 
-        const visibleRange = 2000; 
-        const perspectiveDepth = 800; 
+
+        const cardWidth = 220;
+        const visibleRange = 2000;
+        const perspectiveDepth = 800;
 
         let imagePaths = [];
         let audioPaths = [];
@@ -824,10 +818,8 @@
             applyLayout(currentLayout);
         }
 
-        
         const autoScrollSpeed = 0.5;
 
-        
         function animate() {
             if (currentLayout !== 'rotate') {
                 rafId = null;
@@ -837,56 +829,37 @@
                 rafId = requestAnimationFrame(animate);
                 return;
             }
-            
+
             if (!isDragging) {
                 targetScroll += velocity;
                 velocity *= 0.95;
-                
-                
                 targetScroll += autoScrollSpeed;
             }
 
-            
             currentScroll += (targetScroll - currentScroll) * 0.1;
 
             cards.forEach(card => {
                 const index = parseInt(card.dataset.index);
-                
-                
-                
                 let virtualIndex = index * cardWidth - currentScroll;
-                
-                
+
                 const totalSetWidth = imagePaths.length * cardWidth;
                 while (virtualIndex < -totalSetWidth / 2) virtualIndex += totalSetWidth;
                 while (virtualIndex > totalSetWidth / 2) virtualIndex -= totalSetWidth;
 
-                
                 if (Math.abs(virtualIndex) < window.innerWidth) {
                     card.style.display = 'block';
 
-                    
-                    
                     const progress = virtualIndex / (window.innerWidth / 1.5);
-                    const clampedProgress = Math.max(-1, Math.min(1, progress));
-                    
-                    
                     const x = virtualIndex;
-                    
-                    
-                    
                     const z = -Math.pow(Math.abs(progress), 2) * 500;
-
-                    
-                    const rotateY = progress * 45; 
+                    const rotateY = progress * 45;
 
                     card.style.transform = `
-                        translateX(${x}px) 
-                        translateZ(${z}px) 
+                        translateX(${x}px)
+                        translateZ(${z}px)
                         rotateY(${rotateY}deg)
                     `;
 
-                    
                     card.style.opacity = 1 - Math.pow(Math.abs(progress), 3);
                 } else {
                     card.style.display = 'none';
@@ -960,14 +933,12 @@
             }
         }
 
-        
         viewport.addEventListener('mousedown', (e) => {
             if (currentLayout !== 'rotate') return;
             isDragging = true;
             startX = e.clientX;
             lastX = e.clientX;
             viewport.style.cursor = 'grabbing';
-            
             velocity = 0;
         });
 
@@ -979,18 +950,13 @@
         window.addEventListener('mousemove', (e) => {
             if (currentLayout !== 'rotate') return;
             if (!isDragging) return;
-            
+
             const delta = e.clientX - lastX;
             lastX = e.clientX;
-            
-            
             targetScroll -= delta * 1.5;
-            
-            
             velocity = -delta * 0.5;
         });
 
-        
         viewport.addEventListener('touchstart', (e) => {
             if (currentLayout !== 'rotate') return;
             isDragging = true;
@@ -1023,10 +989,8 @@
             toggleAudioPlayback();
         });
 
-        
         initializeGallery();
         loadWeather();
-
     </script>
 
 </body></html>
