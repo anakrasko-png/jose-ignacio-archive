@@ -221,7 +221,8 @@
             display: block !important;
         }
 
-        .card img {
+        .card img,
+        .card video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -487,7 +488,7 @@
         const visibleRange = 2000;
         const perspectiveDepth = 800;
 
-        let imagePaths = [];
+        let galleryItems = [];
         let audioPaths = [];
         let cards = [];
         let currentAudioIndex = -1;
@@ -520,7 +521,7 @@
         const audioCrossfadeDurationMs = 3200;
         const audioCrossfadeDurationSeconds = audioCrossfadeDurationMs / 1000;
 
-        async function loadImagePaths() {
+        async function loadGalleryItems() {
             const response = await fetch('/data/gallery.json', {
                 cache: 'no-store'
             });
@@ -528,7 +529,36 @@
                 throw new Error(`Gallery request failed with ${response.status}`);
             }
             const data = await response.json();
-            return Array.isArray(data.images) ? data.images : [];
+            if (Array.isArray(data.items)) {
+                return data.items
+                    .map((item) => {
+                        if (typeof item === 'string') {
+                            return {
+                                path: item,
+                                type: /\.(mp4|mov|m4v)$/i.test(item) ? 'video' : 'image'
+                            };
+                        }
+
+                        if (!item || typeof item.path !== 'string') {
+                            return null;
+                        }
+
+                        return {
+                            path: item.path,
+                            type: item.type === 'video' ? 'video' : 'image'
+                        };
+                    })
+                    .filter(Boolean);
+            }
+
+            if (Array.isArray(data.images)) {
+                return data.images.map((path) => ({
+                    path,
+                    type: /\.(mp4|mov|m4v)$/i.test(path) ? 'video' : 'image'
+                }));
+            }
+
+            return [];
         }
 
         async function loadWeather() {
@@ -733,8 +763,11 @@
             return variants;
         }
 
-        async function deriveGradientPalettes(paths) {
-            const samplePaths = paths.slice(0, 36);
+        async function deriveGradientPalettes(items) {
+            const samplePaths = items
+                .filter((item) => item.type === 'image')
+                .map((item) => item.path)
+                .slice(0, 36);
             const colors = (await Promise.all(
                 samplePaths.map((path) =>
                     averageImageColor(path).catch(() => null)
@@ -1072,15 +1105,26 @@
 
         function buildCards() {
             strip.innerHTML = '';
-            imagePaths.forEach((path, index) => {
+            galleryItems.forEach((item, index) => {
                 const card = document.createElement('div');
                 card.className = 'card';
+                const media = item.type === 'video'
+                    ? document.createElement('video')
+                    : document.createElement('img');
 
-                const img = document.createElement('img');
-                img.src = encodeURI(path);
-                img.alt = `Gallery image ${index + 1}`;
+                if (item.type === 'video') {
+                    media.src = encodeURI(item.path);
+                    media.muted = true;
+                    media.loop = true;
+                    media.autoplay = true;
+                    media.playsInline = true;
+                    media.setAttribute('aria-label', `Gallery video ${index + 1}`);
+                } else {
+                    media.src = encodeURI(item.path);
+                    media.alt = `Gallery image ${index + 1}`;
+                }
 
-                card.appendChild(img);
+                card.appendChild(media);
                 strip.appendChild(card);
                 card.dataset.index = index;
             });
@@ -1112,7 +1156,7 @@
                 const index = parseInt(card.dataset.index);
                 let virtualIndex = index * cardWidth - currentScroll;
 
-                const totalSetWidth = imagePaths.length * cardWidth;
+                const totalSetWidth = galleryItems.length * cardWidth;
                 while (virtualIndex < -totalSetWidth / 2) virtualIndex += totalSetWidth;
                 while (virtualIndex > totalSetWidth / 2) virtualIndex -= totalSetWidth;
 
@@ -1173,22 +1217,22 @@
 
         async function initializeGallery() {
             try {
-                [imagePaths, audioPaths] = await Promise.all([
-                    loadImagePaths(),
+                [galleryItems, audioPaths] = await Promise.all([
+                    loadGalleryItems(),
                     loadAudioPaths().catch((error) => {
                         console.error(error);
                         return [];
                     })
                 ]);
-                if (!imagePaths.length) {
-                    loaderText.textContent = 'NO PHOTOS FOUND IN GALLERY FOLDER';
+                if (!galleryItems.length) {
+                    loaderText.textContent = 'NO MEDIA FOUND IN GALLERY FOLDER';
                     overlay.style.opacity = 1;
                     return;
                 }
 
                 audioToggle.disabled = audioPaths.length === 0;
                 updateAudioButton();
-                deriveGradientPalettes(imagePaths).catch((error) => {
+                deriveGradientPalettes(galleryItems).catch((error) => {
                     console.error(error);
                 });
                 buildCards();
