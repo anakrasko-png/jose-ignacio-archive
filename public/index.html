@@ -496,6 +496,7 @@
         let queuedAudioIndex = -1;
         let audioIntent = 'paused';
         let isCrossfading = false;
+        let audioWatchdogTimer = null;
         let currentScroll = 0;
         let targetScroll = 0;
         let currentLayout = 'rotate';
@@ -808,6 +809,50 @@
             audioPlayers.forEach(resetAudioPlayer);
         }
 
+        function stopAudioWatchdog() {
+            if (audioWatchdogTimer) {
+                window.clearInterval(audioWatchdogTimer);
+                audioWatchdogTimer = null;
+            }
+        }
+
+        function startAudioWatchdog() {
+            stopAudioWatchdog();
+            audioWatchdogTimer = window.setInterval(() => {
+                if (audioIntent !== 'playing' || isCrossfading) {
+                    return;
+                }
+
+                const activePlayer = getActiveAudioPlayer();
+                if (!activePlayer || !activePlayer.getAttribute('src')) {
+                    return;
+                }
+
+                if (activePlayer.error) {
+                    hardSwitchToAudioIndex(chooseNextAudioIndex(currentAudioIndex)).catch((error) => {
+                        console.error(error);
+                    });
+                    return;
+                }
+
+                if (Number.isFinite(activePlayer.duration)) {
+                    const remaining = activePlayer.duration - activePlayer.currentTime;
+                    if (remaining <= 0.35) {
+                        crossfadeToNextAudio(0).catch((error) => {
+                            console.error(error);
+                        });
+                        return;
+                    }
+                }
+
+                if (activePlayer.paused && activePlayer.currentTime > 0 && !activePlayer.ended) {
+                    hardSwitchToAudioIndex(chooseNextAudioIndex(currentAudioIndex)).catch((error) => {
+                        console.error(error);
+                    });
+                }
+            }, 1500);
+        }
+
         function createHiddenAudioPlayer() {
             const player = document.createElement('video');
             player.preload = 'auto';
@@ -920,6 +965,7 @@
                 await waitForPlayable(activePlayer);
                 activePlayer.volume = 1;
                 await activePlayer.play();
+                startAudioWatchdog();
                 if (audioIntent === 'playing') {
                     primeQueuedAudioPlayer().catch((error) => {
                         console.error(error);
@@ -982,6 +1028,7 @@
                 await waitForPlayable(activePlayer);
                 activePlayer.volume = 1;
                 await activePlayer.play();
+                startAudioWatchdog();
                 primeQueuedAudioPlayer().catch((error) => {
                     console.error(error);
                 });
@@ -1000,6 +1047,7 @@
         function pauseCurrentAudio() {
             isCrossfading = false;
             audioIntent = 'paused';
+            stopAudioWatchdog();
             audioPlayers.forEach((player) => {
                 if (player) {
                     player.pause();
@@ -1085,11 +1133,13 @@
             outgoingPlayer.volume = 1;
             outgoingPlayer.removeAttribute('src');
             outgoingPlayer.load();
+            incomingPlayer.volume = 1;
 
             activeAudioDeck = (activeAudioDeck + 1) % 2;
             currentAudioIndex = nextIndex;
             queuedAudioIndex = -1;
             isCrossfading = false;
+            startAudioWatchdog();
 
             if (audioIntent === 'playing') {
                 primeQueuedAudioPlayer().catch((error) => {
